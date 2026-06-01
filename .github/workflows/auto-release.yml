@@ -41,6 +41,19 @@ jobs:
             exit 1
           fi
 
+      - name: Build wheel from current checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: built-wheel
+          path: dist/*.whl
+
       - name: Tag the current HEAD
         shell: bash
         run: |
