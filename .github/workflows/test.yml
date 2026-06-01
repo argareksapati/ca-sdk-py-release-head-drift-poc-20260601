@@ -1,0 +1,33 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record snapshot and optionally wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "SUBJECT=$(git log -1 --pretty=%s)"
+          echo "CLI_VERSION=$(grep __cli_version__ src/claude_agent_sdk/_cli_version.py)"
+          if [ -f SLOW_A ]; then
+            echo "Sleeping to leave a window for a later main commit"
+            sleep 45
+          fi
+
+      - name: Fail only on B commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f FAIL_B ]; then
+            echo "Intentional failure for B"
+            exit 1
+          fi

@@ -1,0 +1,59 @@
+name: Auto Release on CLI Bump
+
+on:
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  check-trigger:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'chore: bump bundled CLI version to')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove current HEAD drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "EVENT_HEAD_SHA=${{ github.event.workflow_run.head_sha }}"
+            echo "EVENT_HEAD_MESSAGE=${{ github.event.workflow_run.head_commit.message }}"
+            echo "CHECKOUT_HEAD=$(git rev-parse HEAD)"
+            echo "CHECKOUT_SUBJECT=$(git log -1 --pretty=%s)"
+            echo "HEAD_DIFF=$(git diff --name-only HEAD~1 | tr '\n' ',' | sed 's/,$//')"
+            echo "CLI_VERSION_LINE=$(grep __cli_version__ src/claude_agent_sdk/_cli_version.py)"
+            if [ -f A_ONLY ]; then echo "HAS_A_ONLY=yes"; else echo "HAS_A_ONLY=no"; fi
+            if [ -f B_ONLY ]; then echo "HAS_B_ONLY=yes"; else echo "HAS_B_ONLY=no"; fi
+            if [ -f FAIL_B ]; then echo "HAS_FAIL_B=yes"; else echo "HAS_FAIL_B=no"; fi
+          } | tee release-proof.txt
+
+          if ! git diff --name-only HEAD~1 | grep -q '_cli_version.py'; then
+            echo "::error::CLI version file not changed in this commit"
+            exit 1
+          fi
+
+      - name: Tag the current HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          tag="poc-release-${{ github.run_id }}"
+          git tag "$tag"
+          git push origin "$tag"
+          echo "TAG_NAME=$tag" | tee -a release-proof.txt
+          echo "TAG_TARGET=$(git rev-parse HEAD)" | tee -a release-proof.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-proof
+          path: release-proof.txt
